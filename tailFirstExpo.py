@@ -8,6 +8,8 @@ from operator import itemgetter
 
 def executionTime():
 	return random.expovariate(0.1)
+def jobSizeGenerate():
+	return random.expovariate(0.02)
 
 def mockPlace(heap, tasks_num,duration):
 	candidates=[]
@@ -17,7 +19,7 @@ def mockPlace(heap, tasks_num,duration):
 		heapq.heappush(heap, (time+duration,index))
 	return candidates
 
-def main(jobs_num, worker_num, tasks_num, probRatio=2):
+def main(jobs_num, worker_num, probRatio=2):
 	stfSet=[]
 	srjfSet=[]
 	fifoSet=[]
@@ -25,10 +27,11 @@ def main(jobs_num, worker_num, tasks_num, probRatio=2):
 	speedupOverSRJF=[]
 	speedupOverFIFO=[]
 	
-	for iteration in range(20):
+	for iteration in range(1):
 		workers = [[] for i in range(worker_num)]
 		for jobIndex in range(jobs_num):
 			duration = executionTime()
+			tasks_num = jobSizeGenerate()
 			probs = random.sample(range(worker_num), min(worker_num, tasks_num*probRatio))
 			#convert to list of waiting time of each worker
 			probs = map(lambda x: (sum([a for (a,b) in workers[x]]), x), probs)
@@ -40,21 +43,28 @@ def main(jobs_num, worker_num, tasks_num, probRatio=2):
 		srjf = SRJF(deepcopy(workers))
 		fifo = FIFO(deepcopy(workers),2)
 		ta = tailAware(deepcopy(workers))
-		stfSet.append(stf)
-		srjfSet.append(srjf)
-		fifoSet.append(fifo)
-		taSet.append(ta)
-		speedupOverSRJF.append(float(srjf)/ta)
-		speedupOverFIFO.append(float(fifo)/ta)
+		stfSet.append(sum(stf))
+		srjfSet.append(sum(srjf))
+		fifoSet.append(sum(fifo))
+		taSet.append(sum(ta))
+		#speedupOverSRJF.append(float(srjf)/ta)
+		#speedupOverFIFO.append(float(fifo)/ta)
 	print ("STF:", mean(stfSet))
 	print ("SRJF:", mean(srjfSet))
 	print ("FIFO:", mean(fifoSet))
 	print ("TailAware", mean(taSet))
-	print ("speedupOverSRJF==================")
-	print ("max",max(speedupOverSRJF),"min",min(speedupOverSRJF),"mean",mean(speedupOverSRJF))
-	print ("speedupOverFIFO==================")
-	print ("max",max(speedupOverFIFO),"min",min(speedupOverFIFO),"mean",mean(speedupOverFIFO))		
-
+	print ("speedupOverSRJF", mean(srjfSet)/mean(taSet))
+	print ("speedupOverSRJF", mean(fifoSet)/mean(taSet))
+	#print ("speedupOverSRJF==================")
+	#print ("max",max(speedupOverSRJF),"min",min(speedupOverSRJF),"mean",mean(speedupOverSRJF))
+	#print ("speedupOverFIFO==================")
+	#print ("max",max(speedupOverFIFO),"min",min(speedupOverFIFO),"mean",mean(speedupOverFIFO))	
+	print "srjf================"	
+	print srjf
+	print "fifo================"
+	print fifo
+	print "ta=================="
+	print ta
 
 def SRJF(placements):
 	#placements is a list of list of tasks(duration, jobIndex) on a worker
@@ -95,7 +105,7 @@ def SRJF(placements):
 
 	execLog.sort(key=itemgetter(1))
 	JCT = [reduce(lambda x,y: (max(x[0],y[0]),x[1]), group) for _,group in groupby(execLog,key=itemgetter(1))]
-	return sum([x for (x,y) in JCT])
+	return [x for (x,y) in JCT]
 
 
 def STF(placements):
@@ -111,7 +121,7 @@ def STF(placements):
 			acc += duration
 	execLog.sort(key=itemgetter(1))
 	JCT = [reduce(lambda x,y: (max(x[0],y[0]),x[1]), group) for _,group in groupby(execLog,key=itemgetter(1))]
-	return sum([x for (x,y) in JCT])
+	return [x for (x,y) in JCT]
 
 def FIFO(placements,flag):
 	execLog=[]
@@ -125,7 +135,7 @@ def FIFO(placements,flag):
 	execLog.sort(key=itemgetter(1))
 	JCT = [reduce(lambda x,y: (max(x[0],y[0]),x[1]), group) for _,group in groupby(execLog,key=itemgetter(1))]
 	if(flag>=1):
-		return sum([x for (x,y) in JCT])
+		return [x for (x,y) in JCT]
 	else:
 		return dict([(y,x) for (x,y) in JCT])
 
