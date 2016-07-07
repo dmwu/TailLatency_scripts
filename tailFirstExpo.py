@@ -5,11 +5,12 @@ from numpy import mean
 from copy import deepcopy
 from itertools import groupby
 from operator import itemgetter
+from math import floor
 
 def executionTime():
 	return random.expovariate(0.1)
 def jobSizeGenerate():
-	return random.expovariate(0.02)
+	return int(random.expovariate(0.015))
 
 def mockPlace(heap, tasks_num,duration):
 	candidates=[]
@@ -31,12 +32,13 @@ def main(jobs_num, worker_num, probRatio=2):
 		workers = [[] for i in range(worker_num)]
 		for jobIndex in range(jobs_num):
 			duration = executionTime()
-			tasks_num = jobSizeGenerate()
+			tasks_num = max(jobSizeGenerate(),1)
 			probs = random.sample(range(worker_num), min(worker_num, tasks_num*probRatio))
 			#convert to list of waiting time of each worker
 			probs = map(lambda x: (sum([a for (a,b) in workers[x]]), x), probs)
 			heapq.heapify(probs)
 			candidates = mockPlace(probs,tasks_num,duration)
+			assert(len(candidates)>0)
 			for k in candidates:
 				workers[k].append((duration,jobIndex))
 		stf = STF(deepcopy(workers))
@@ -54,17 +56,19 @@ def main(jobs_num, worker_num, probRatio=2):
 	print ("FIFO:", mean(fifoSet))
 	print ("TailAware", mean(taSet))
 	print ("speedupOverSRJF", mean(srjfSet)/mean(taSet))
-	print ("speedupOverSRJF", mean(fifoSet)/mean(taSet))
+	print ("speedupOverFIFO", mean(fifoSet)/mean(taSet))
+	#print ("len(ta)",len(ta),"len(fifo)",len(fifo),"len(srjf)",len(srjf),"len(workers)",\
+	#	len(set([x for worker in workers for (y,x) in worker])))
 	#print ("speedupOverSRJF==================")
 	#print ("max",max(speedupOverSRJF),"min",min(speedupOverSRJF),"mean",mean(speedupOverSRJF))
 	#print ("speedupOverFIFO==================")
 	#print ("max",max(speedupOverFIFO),"min",min(speedupOverFIFO),"mean",mean(speedupOverFIFO))	
-	print "srjf================"	
-	print srjf
-	print "fifo================"
-	print fifo
-	print "ta=================="
-	print ta
+	# print "srjf================"	
+	# print srjf
+	# print "fifo================"
+	# print fifo
+	# print "ta=================="
+	# print ta
 
 def SRJF(placements):
 	#placements is a list of list of tasks(duration, jobIndex) on a worker
@@ -190,10 +194,10 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument("jobNum", type=int, help= "specify how many jobs")
 	parser.add_argument("workerNum", type=int, help= "how many workers")
-	parser.add_argument("tasksNum", type=int, help = "how many tasks in a job")
+	#parser.add_argument("tasksNum", type=int, help = "how many tasks in a job")
 	#parser.add_argument("taskHeterogeneity", type=int, help="ratio of the longest task over the shrotest task")
 	#parser.add_argument("probRatio", type=int, help = "how many probs for each task",default=2)
 	#parser.add_argument("iterations", type=int, help="specify the number of iterations",default=1)
 	args = parser.parse_args()
-	main(args.jobNum,args.workerNum,args.tasksNum)
+	main(args.jobNum,args.workerNum)
 
