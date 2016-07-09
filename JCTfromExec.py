@@ -8,15 +8,15 @@ from operator import itemgetter
 from math import floor
 
 def executionTime():
-	return random.expovariate(0.001)
+	return random.expovariate(0.1)
 def jobSizeGenerate():
-	return int(random.expovariate(0.02))
+	return int(random.expovariate(0.015))
 
 def mockPlace(heap, tasks_num,duration):
 	candidates=[]
 	for k in range(tasks_num):
 		(time,index) = heapq.heappop(heap)
-		candidates.append((duration,index))
+		candidates.append(index)
 		heapq.heappush(heap, (time+duration,index))
 	return candidates
 
@@ -25,59 +25,44 @@ def main(jobs_num, worker_num, probRatio=2):
 	srjfSet=[]
 	fifoSet=[]
 	taSet=[]
-	dsrjfSet=[]
-	speedupOverSTF=[]
+	speedupOverSRJF=[]
 	speedupOverFIFO=[]
-	speedupOverSRJF =[]
-	speedupOverDSRJF = []
-	for iteration in range(40):
+	
+	for iteration in range(20):
 		workers = [[] for i in range(worker_num)]
 		for jobIndex in range(jobs_num):
 			duration = executionTime()
-			#duration = random.randint(10,10)
 			tasks_num = max(jobSizeGenerate(),1)
-			#tasks_num = 60
-			#print ("tasks_num",tasks_num, "task_duration",duration)
 			probs = random.sample(range(worker_num), min(worker_num, tasks_num*probRatio))
 			#convert to list of waiting time of each worker
 			probs = map(lambda x: (sum([a for (a,b) in workers[x]]), x), probs)
 			heapq.heapify(probs)
 			candidates = mockPlace(probs,tasks_num,duration)
 			assert(len(candidates)>0)
-			for (duration,windex) in candidates:
-				workers[windex].append((duration,jobIndex))
+			for k in candidates:
+				workers[k].append((duration,jobIndex))
 		stf = STF(deepcopy(workers))
 		srjf = SRJF(deepcopy(workers))
 		fifo = FIFO(deepcopy(workers),2)
 		ta = tailAware(deepcopy(workers))
-		dsrjf = DistributedSRJF(deepcopy(workers))
-		stfSet.append(stf)
-		srjfSet.append(srjf)
-		fifoSet.append(fifo)
-		taSet.append(ta)
-		dsrjfSet.append(dsrjf)
-		speedupOverSRJF.append(float(stf)/ta)
-		speedupOverFIFO.append(float(fifo)/ta)
-		speedupOverSTF.append(float(stf)/ta)
-		speedupOverDSRJF.append(float(dsrjf)/ta)
-		print("stf",stf,"srjf",srjf,"dsrjf",dsrjf,"fifo",fifo,"ta",ta)
+		stfSet.append(sum(stf))
+		srjfSet.append(sum(srjf))
+		fifoSet.append(sum(fifo))
+		taSet.append(sum(ta))
+		#speedupOverSRJF.append(float(srjf)/ta)
+		#speedupOverFIFO.append(float(fifo)/ta)
 	print ("STF:", mean(stfSet))
 	print ("SRJF:", mean(srjfSet))
 	print ("FIFO:", mean(fifoSet))
 	print ("TailAware", mean(taSet))
-	print ("DSRJF:", mean(dsrjfSet))
-	#print ("speedupOverSTF", speedupOverSTF)
-	#print ("speedupOverFIFO", speedupOverFIFO)
+	print ("speedupOverSTF", mean(stfSet)/mean(taSet))
+	print ("speedupOverFIFO", mean(fifoSet)/mean(taSet))
 	#print ("len(ta)",len(ta),"len(fifo)",len(fifo),"len(srjf)",len(srjf),"len(workers)",\
 	#	len(set([x for worker in workers for (y,x) in worker])))
-	print ("speedupOverSRJF==================")
-	print ("max",max(speedupOverSRJF),"min",min(speedupOverSRJF),"mean",mean(speedupOverSRJF))
-	print ("speedupOverFIFO==================")
-	print ("max",max(speedupOverFIFO),"min",min(speedupOverFIFO),"mean",mean(speedupOverFIFO))
-	print ("speedupOverSTF==================")
-	print ("max",max(speedupOverSTF),"min",min(speedupOverSTF),"mean",mean(speedupOverSTF))	
-	print ("speedupOverDSRJF==================")
-	print ("max",max(speedupOverDSRJF),"min",min(speedupOverDSRJF),"mean",mean(speedupOverDSRJF))	
+	#print ("speedupOverSRJF==================")
+	#print ("max",max(speedupOverSRJF),"min",min(speedupOverSRJF),"mean",mean(speedupOverSRJF))
+	#print ("speedupOverFIFO==================")
+	#print ("max",max(speedupOverFIFO),"min",min(speedupOverFIFO),"mean",mean(speedupOverFIFO))	
 	# print "srjf================"	
 	# print srjf
 	# print "fifo================"
@@ -85,30 +70,14 @@ def main(jobs_num, worker_num, probRatio=2):
 	# print "ta=================="
 	# print ta
 
-def DistributedSRJF(placements):
-	def tallyEachJob(placements):
-		items = [item for sublist in placements for item in sublist]
-		items.sort(key=itemgetter(1))
-		remainWork = [reduce(lambda x,y: (x[0]+y[0],x[1]),group) \
-			for _,group in groupby(items, key=itemgetter(1))]
-		remainWork.sort(key=itemgetter(0))
-		return dict([(y,x) for (x,y) in remainWork])
-
-	remWork = tallyEachJob(placements)
-	for li in placements:
-		li.sort(key=lambda (duration, index):remWork[index])
-	return FIFO(deepcopy(placements),1)
-
-
-
-
 def SRJF(placements):
 	#placements is a list of list of tasks(duration, jobIndex) on a worker
 	execLog = []
+	startTimeLog = {}
 	timeAccu =[0]*len(placements)
 	jobOrder =[]
 	totalRemainTasks = sum([len(x) for x in placements])
-	JobTracker = {}
+	JobRemTracker = {}
 	def tallyEachJob(placements):
 		items = [item for sublist in placements for item in sublist]
 		items.sort(key=itemgetter(1))
@@ -125,27 +94,30 @@ def SRJF(placements):
 			if k <= key:
 				return k
 
-	JobTracker[0] = tallyEachJob(placements)
+	JobRemTracker[0] = tallyEachJob(placements)
 	while(totalRemainTasks > 0):
 		for i in range(len(placements)):
 			if totalRemainTasks > 0:
-				mostRecentKey = findClosestKey(JobTracker,timeAccu[i])
-				jobOrder = JobTracker[mostRecentKey]
+				mostRecentKey = findClosestKey(JobRemTracker,timeAccu[i])
+				jobOrder = JobRemTracker[mostRecentKey]
 				if(len(placements[i]) > 0):
 					(duration, jobIndex) = min(placements[i], key=lambda x: jobOrder[x[1]] )
 					placements[i].remove((duration,jobIndex))
+					if (jobIndex not in startTimeLog.keys() or startTimeLog[jobIndex]> timeAccu[i]):
+						startTimeLog[jobIndex] = timeAccu[i]
+					JobRemTracker[timeAccu[i]]=tallyEachJob(placements)
+					execLog.append((timeAccu[i]+duration,jobIndex))
 					timeAccu[i] += duration
-					JobTracker[timeAccu[i]]=tallyEachJob(placements)
-					execLog.append((timeAccu[i],jobIndex))
 					totalRemainTasks -= 1
 
 	execLog.sort(key=itemgetter(1))
 	JCT = [reduce(lambda x,y: (max(x[0],y[0]),x[1]), group) for _,group in groupby(execLog,key=itemgetter(1))]
-	return sum([x for (x,y) in JCT])
+	return [ x- startTimeLog[y] for (x,y) in JCT]
 
 
 def STF(placements):
 	execLog=[]
+	startTimeLog= {}
 	for li in placements:
 		li.sort(key=itemgetter(0))
 
@@ -153,25 +125,30 @@ def STF(placements):
 		acc = 0
 		#print li
 		for (duration, jobIndex) in li:
+			if(jobIndex not in startTimeLog.keys() or acc < startTimeLog[jobIndex]):
+				startTimeLog[jobIndex] = acc
 			execLog.append( (duration+acc, jobIndex) )
 			acc += duration
 	execLog.sort(key=itemgetter(1))
 	JCT = [reduce(lambda x,y: (max(x[0],y[0]),x[1]), group) for _,group in groupby(execLog,key=itemgetter(1))]
-	return sum([x for (x,y) in JCT])
+	return [x - startTimeLog[y] for (x,y) in JCT]
 
 def FIFO(placements,flag):
 	execLog=[]
+	startTimeLog={}
 	for li in placements:
 		acc = 0
 		# if(flag>=2):
 		# 	#print li
 		for (duration, jobIndex) in li:
+			if(jobIndex not in startTimeLog.keys() or acc < startTimeLog[jobIndex]):
+				startTimeLog[jobIndex] = acc
 			execLog.append( (duration+acc, jobIndex) )
 			acc += duration
 	execLog.sort(key=itemgetter(1))
 	JCT = [reduce(lambda x,y: (max(x[0],y[0]),x[1]), group) for _,group in groupby(execLog,key=itemgetter(1))]
 	if(flag>=1):
-		return sum([x for (x,y) in JCT])
+		return [x - startTimeLog[y] for (x,y) in JCT]
 	else:
 		return dict([(y,x) for (x,y) in JCT])
 
