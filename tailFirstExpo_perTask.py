@@ -8,7 +8,7 @@ from operator import itemgetter
 from math import floor
 
 def executionTime():
-	return random.expovariate(0.001)
+	return random.expovariate(0.01)
 def jobSizeGenerate():
 	return int(random.expovariate(0.02))
 
@@ -20,7 +20,7 @@ def mockPlace(heap, tasks_num,duration):
 		heapq.heappush(heap, (time+duration,index))
 	return candidates
 
-def main(jobs_num, worker_num, probRatio=2):
+def main(jobs_num, worker_num, probRatio=5):
 	stfSet=[]
 	srjfSet=[]
 	fifoSet=[]
@@ -30,33 +30,36 @@ def main(jobs_num, worker_num, probRatio=2):
 	speedupOverFIFO=[]
 	speedupOverSRJF =[]
 	speedupOverDSRJF = []
-	for iteration in range(40):
+	for iteration in range(30):
 		workers = [[] for i in range(worker_num)]
+		schedulers = []
 		for jobIndex in range(jobs_num):
-			duration = executionTime()
-			#duration = random.randint(10,10)
 			tasks_num = max(jobSizeGenerate(),1)
-			#tasks_num = 60
-			#print ("tasks_num",tasks_num, "task_duration",duration)
-			probs = random.sample(range(worker_num), min(worker_num, tasks_num*probRatio))
+			schedulers.append((jobIndex,tasks_num,executionTime()))
+		while(len(schedulers)>0):
+			next = random.randint(0,len(schedulers)-1)
+			probs = random.sample(range(worker_num), min(worker_num, probRatio))
 			#convert to list of waiting time of each worker
-			probs = map(lambda x: (sum([a for (a,b) in workers[x]]), x), probs)
-			heapq.heapify(probs)
-			candidates = mockPlace(probs,tasks_num,duration)
-			assert(len(candidates)>0)
-			for (duration,windex) in candidates:
-				workers[windex].append((duration,jobIndex))
+			minworker = min(probs, key = lambda x: sum([a for (a,b) in workers[x]]))			
+			(ji, tn, duration) = schedulers[next]
+			assert(tn >0)
+			workers[minworker].append((duration,ji))
+			if(tn <=1 ):
+				schedulers.pop(next) 
+			else:
+				schedulers[next] = (ji,tn-1,duration)
+
 		stf = STF(deepcopy(workers))
 		srjf = SRJF(deepcopy(workers))
 		fifo = FIFO(deepcopy(workers),2)
-		ta = tailAware(deepcopy(workers))
+		(ta) = tailAware(deepcopy(workers))
 		dsrjf = DistributedSRJF(deepcopy(workers))
 		stfSet.append(stf)
 		srjfSet.append(srjf)
 		fifoSet.append(fifo)
 		taSet.append(ta)
 		dsrjfSet.append(dsrjf)
-		speedupOverSRJF.append(float(stf)/ta)
+		speedupOverSRJF.append(float(srjf)/ta)
 		speedupOverFIFO.append(float(fifo)/ta)
 		speedupOverSTF.append(float(stf)/ta)
 		speedupOverDSRJF.append(float(dsrjf)/ta)
@@ -192,7 +195,6 @@ def tailAware(placements):
 			worker[cur] = worker[cur-1]
 			worker[cur-1] = temp
 			checkAndPerform(worker, budgetsPerWorker, indexOfBottleneck-1)
-
 	#merge tasks of the same job on every worker
 	for li in placements:
 		if(len(li) > 1):
@@ -213,13 +215,13 @@ def tailAware(placements):
 			budgets[ii][jobIndex] = tailLatency[jobIndex]-(acc+duration)
 			assert(budgets[ii][jobIndex]>=0)
 			acc += duration
-
 	for ii in range(len(placements)):
 		#print placements[ii]
 		for jj in range(len(placements[ii])):
 			checkAndPerform(placements[ii], budgets[ii], jj)
+	#print ("avg exchangeCount per worker", float(exchangeCount)/len(placements))
 
-	return FIFO(deepcopy(placements),1)
+	return (FIFO(deepcopy(placements),1))
 	
 
 if __name__ == "__main__":
