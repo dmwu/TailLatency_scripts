@@ -1,6 +1,7 @@
 import sys,os,argparse
 import random
 import heapq
+import numpy as np
 from numpy import mean
 from copy import deepcopy
 from itertools import groupby
@@ -8,9 +9,11 @@ from operator import itemgetter
 from math import floor
 
 def executionTime():
-	return random.expovariate(0.01)
+	sample = np.random.pareto(1,1)+1
+	return round(sample[0],1)
+
 def jobSizeGenerate():
-	return int(random.expovariate(0.02))
+	return int(random.expovariate(0.025))
 
 def mockPlace(heap, tasks_num,duration):
 	candidates=[]
@@ -28,9 +31,9 @@ def main(jobs_num, worker_num, probRatio=5):
 	dsrjfSet=[]
 	speedupOverSTF=[]
 	speedupOverFIFO=[]
-	speedupOverSRJF =[]
+	speedupOverta =[]
 	speedupOverDSRJF = []
-	for iteration in range(30):
+	for iteration in range(20):
 		workers = [[] for i in range(worker_num)]
 		schedulers = []
 		for jobIndex in range(jobs_num):
@@ -54,15 +57,17 @@ def main(jobs_num, worker_num, probRatio=5):
 		fifo = FIFO(deepcopy(workers),2)
 		(ta) = tailAware(deepcopy(workers))
 		dsrjf = DistributedSRJF(deepcopy(workers))
+		if(srjf >= dsrjf):
+			print'*'*30
 		stfSet.append(stf)
 		srjfSet.append(srjf)
 		fifoSet.append(fifo)
 		taSet.append(ta)
 		dsrjfSet.append(dsrjf)
-		speedupOverSRJF.append(float(srjf)/ta)
-		speedupOverFIFO.append(float(fifo)/ta)
-		speedupOverSTF.append(float(stf)/ta)
-		speedupOverDSRJF.append(float(dsrjf)/ta)
+		speedupOverta.append(float(ta)/srjf)
+		speedupOverFIFO.append(float(fifo)/srjf)
+		speedupOverSTF.append(float(stf)/srjf)
+		speedupOverDSRJF.append(float(dsrjf)/srjf)
 		print("stf",stf,"srjf",srjf,"dsrjf",dsrjf,"fifo",fifo,"ta",ta)
 	print ("STF:", mean(stfSet))
 	print ("SRJF:", mean(srjfSet))
@@ -73,8 +78,8 @@ def main(jobs_num, worker_num, probRatio=5):
 	#print ("speedupOverFIFO", speedupOverFIFO)
 	#print ("len(ta)",len(ta),"len(fifo)",len(fifo),"len(srjf)",len(srjf),"len(workers)",\
 	#	len(set([x for worker in workers for (y,x) in worker])))
-	print ("speedupOverSRJF==================")
-	print ("max",max(speedupOverSRJF),"min",min(speedupOverSRJF),"mean",mean(speedupOverSRJF))
+	print ("speedupOverta==================")
+	print ("max",max(speedupOverta),"min",min(speedupOverta),"mean",mean(speedupOverta))
 	print ("speedupOverFIFO==================")
 	print ("max",max(speedupOverFIFO),"min",min(speedupOverFIFO),"mean",mean(speedupOverFIFO))
 	print ("speedupOverSTF==================")
@@ -111,7 +116,9 @@ def SRJF(placements):
 	timeAccu =[0]*len(placements)
 	jobOrder =[]
 	totalRemainTasks = sum([len(x) for x in placements])
-	JobTracker = {}
+	JobTotal= {}
+	updatesOfRemWork=[]
+
 	def tallyEachJob(placements):
 		items = [item for sublist in placements for item in sublist]
 		items.sort(key=itemgetter(1))
@@ -128,19 +135,42 @@ def SRJF(placements):
 			if k <= key:
 				return k
 
-	JobTracker[0] = tallyEachJob(placements)
-	while(totalRemainTasks > 0):
-		for i in range(len(placements)):
-			if totalRemainTasks > 0:
-				mostRecentKey = findClosestKey(JobTracker,timeAccu[i])
-				jobOrder = JobTracker[mostRecentKey]
-				if(len(placements[i]) > 0):
-					(duration, jobIndex) = min(placements[i], key=lambda x: jobOrder[x[1]] )
-					placements[i].remove((duration,jobIndex))
-					timeAccu[i] += duration
-					JobTracker[timeAccu[i]]=tallyEachJob(placements)
-					execLog.append((timeAccu[i],jobIndex))
-					totalRemainTasks -= 1
+	def readRemWork(time):
+		effectiveUpdates = [(y,z) for (x,y,z) in updatesOfRemWork if x<=time]
+		JTCopy = deepcopy(JobTotal)
+		for (duration,jobIndex) in effectiveUpdates:
+			JTCopy[jobIndex] -= duration
+		return JTCopy
+
+
+
+	JobTotal= tallyEachJob(placements)
+	heap =[]
+	for i in range(len(placements)):
+		heap.append((0,i))
+	heapq.heapify(heap)
+	while(len(heap)>0):
+		(curTime, workerID) = heapq.heappop(heap)
+		if(len(placements[workerID]) > 0):
+			jobOrder = readRemWork(curTime)
+			(duration, jobIndex) = min(placements[workerID], key=lambda x: jobOrder[x[1]] )
+			placements[workerID].remove((duration,jobIndex))
+			updatesOfRemWork.append((curTime+duration,duration,jobIndex))
+			execLog.append((curTime+duration,jobIndex))
+			heapq.heappush(heap, (curTime+duration,workerID))
+
+	# while(totalRemainTasks > 0):
+	# 	for i in range(len(placements)):
+	# 		if totalRemainTasks > 0:
+	# 			mostRecentKey = findClosestKey(JobTracker,timeAccu[i])
+	# 			jobOrder = JobTracker[mostRecentKey]
+	# 			if(len(placements[i]) > 0):
+	# 				(duration, jobIndex) = min(placements[i], key=lambda x: jobOrder[x[1]] )
+	# 				placements[i].remove((duration,jobIndex))
+	# 				timeAccu[i] += duration
+	# 				JobTracker[timeAccu[i]]=tallyEachJob(placements)
+	# 				execLog.append((timeAccu[i],jobIndex))
+	# 				totalRemainTasks -= 1
 
 	execLog.sort(key=itemgetter(1))
 	JCT = [reduce(lambda x,y: (max(x[0],y[0]),x[1]), group) for _,group in groupby(execLog,key=itemgetter(1))]
@@ -225,6 +255,9 @@ def tailAware(placements):
 	
 
 if __name__ == "__main__":
+	placements = [[(3.3, 0), (1.6, 1), (1.6, 1)],
+		[(1.1, 3), (1.1, 3), (3.3, 0), (1.3, 2)],
+		[(1.1, 3), (1.3, 2), (1.6, 1), (1.3, 2), (3.3, 0)]]
 	parser = argparse.ArgumentParser()
 	parser.add_argument("jobNum", type=int, help= "specify how many jobs")
 	parser.add_argument("workerNum", type=int, help= "how many workers")
@@ -234,4 +267,3 @@ if __name__ == "__main__":
 	#parser.add_argument("iterations", type=int, help="specify the number of iterations",default=1)
 	args = parser.parse_args()
 	main(args.jobNum,args.workerNum)
-
