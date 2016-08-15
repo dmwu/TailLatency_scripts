@@ -1,13 +1,16 @@
-numCores = 4
+numCores = 2
 memoryCapacity = 128.0
 paretoK = 0.01
-paretoA = 0.8 
-maxTaskDuration = 360000.0
+paretoA = 0.8
+maxTaskDuration = 36000.0
 memLower = 1 #unit GB
-memUpper = 20
-switchingOverhead = 0.001
-load = 0.7
+memUpper = 10
+switchingOverhead = 0.0
+load = 0.85
 numTasks = 1000000
+networkBandwidth = 1024*1024*1000.0 #1000MB
+diskBandwidth = 1024*1024*100.0 #100MB
+CPUspeed = 2*1024*1024*1024.0 #2GHz
 
 class Task(object):
 	def __init__(self, taskid, duration, memDemand,arrivTime):

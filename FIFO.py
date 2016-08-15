@@ -65,7 +65,6 @@ class TaskAssign(Event):
 					logging.debug("assign task %d on core %d at time %f\n",task.taskid, coreid, currentTime)
 					taskEndEvent = (currentTime+task.duration, TaskEnd(self.worker, coreid, task))
 					return [taskEndEvent]
-		
 		return []
 
 class TaskEnd(Event):
@@ -74,13 +73,18 @@ class TaskEnd(Event):
 		self.coreid = coreid
 		self.task = task
 	def run(self, currentTime):
+		self.worker.endTaskCounter += 1
+		self.worker.busyTime[self.coreid] += self.task.duration
 		self.worker.emptyCores.append(self.coreid)
 		self.worker.usedMem -= self.task.memDemand
 		slowdown = (currentTime - self.task.arrivalTime)/self.task.duration
 		logging.info("task %d arrivals at %f with duration %f, finishs at %f, slowdown is %f\n",\
 			self.task.taskid, self.task.arrivalTime, self.task.duration, currentTime, slowdown)
 		self.worker.slowDownStat[self.task.taskid] = slowdown
+		self.worker.flowTimeStat[self.task.taskid] = currentTime -self.task.arrivalTime
 		taskAssignEvent = (currentTime,TaskAssign(self.worker))
+		if(self.worker.endTaskCounter == len(self.worker.trace)):
+			self.worker.terminationTime = currentTime
 		return [taskAssignEvent]
 
 def get_percentile(N, percent):
@@ -97,19 +101,24 @@ def get_percentile(N, percent):
 
 
 class Worker(object):
-	def __init__(self,id):
+	def __init__(self,id,trace):
 		self.id = id
+		self.trace = trace
 		self.emptyCores = range(cfg.numCores)
 		self.memCapacity = cfg.memoryCapacity
 		self.usedMem = 0
 		self.centralQueue = []
 		self.id = id
 		self.slowDownStat = {}
+		self.flowTimeStat = {}
+		self.busyTime = [0 for x in xrange(cfg.numCores)]
+		self.terminationTime = 0
+		self.endTaskCounter = 0
 
 class FIFO(object):
 	def __init__(self,trace):
 		self.eventQueue = Queue.PriorityQueue()
-		self.worker = Worker(0)
+		self.worker = Worker(0,trace)
 		self.trace = trace
 	def run(self):
 		self.eventQueue.put((0,TaskArrival(self.worker,self.trace,0)))
@@ -122,15 +131,23 @@ class FIFO(object):
 			newEvents = event.run(currentTime)
 			for newEvent in newEvents:
 				self.eventQueue.put(newEvent)
+		print(self.worker.endTaskCounter, len(self.trace), cfg.numTasks)
+		assert(self.worker.endTaskCounter == cfg.numTasks)
 		slowdowns = self.worker.slowDownStat.values()
 		slowdowns.sort()
 		median = get_percentile(slowdowns,50)
 		percentile99 = get_percentile(slowdowns,99)
-		mean = np.mean(slowdowns)
-		logging.warning("FIFO average slowdown is %f\n",mean)
+		slowdownMean = np.mean(slowdowns)
+		ftMean = np.mean(self.worker.flowTimeStat.values())
+		logging.warning("FIFO average slowdown is %f\n",slowdownMean)
 		logging.warning("FIFO max slowdown is %f\n",max(slowdowns))
+		logging.warning("FIFO flowTime mean is %f\n",ftMean)
 		logging.warning("FIFO median and 99th percentile slowdowns are %f,%f\n",median,percentile99)
-		return mean
+		for x in self.worker.busyTime:
+			print "fifo cpu utilization:%f"%(x/self.worker.terminationTime)
+		print "fifo sum of workload:%f terminationTime:%f"%\
+		(sum(self.worker.busyTime),self.worker.terminationTime)
+		return (slowdownMean,ftMean)
 
 def main():
 	logging.basicConfig(level=logging.INFO, format='%(message)s')

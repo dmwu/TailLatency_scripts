@@ -15,10 +15,9 @@ from math import floor
 
 def taskGeneration(taskid,currentTime):
 	duration = float((np.random.pareto(cfg.paretoA,1)+1)*cfg.paretoK)
-	duration = round(min(duration,cfg.maxTaskDuration),3)
+	duration = min(duration,cfg.maxTaskDuration)
 	memDemand = min(1,(duration*10000/cfg.maxTaskDuration))*\
 	(cfg.memUpper-cfg.memLower) + cfg.memLower
-	memDemand = round(memDemand,3)
 	return Task(taskid, duration,memDemand, currentTime)
 
 class Event(object):
@@ -42,13 +41,14 @@ class TaskArrivalWithTrace(Event):
 	def run(self, currentTime):
 		task = self.taskTrace[self.taskid]
 		self.worker.centralQueue.append(task)
+		self.worker.maxQueueLength = max(self.worker.maxQueueLength,len(self.worker.centralQueue))
 		taskAssignEvent = (currentTime, TaskAssign(self.worker))
 		logging.debug('task arrival (id, duration, memDemand) = (%d,%f,%f) at time %f\n',\
 				task.taskid, task.duration,task.memDemand, currentTime)
 		if (self.taskid < len(self.taskTrace)-1):
 			arrivalDelay = self.taskTrace[self.taskid+1].arrivalTime
 			taskArrivalEvent = (currentTime + arrivalDelay,\
-			 TaskArrivalWithTrace(self.worker,self.taskid+1, self.taskTrace))
+				TaskArrivalWithTrace(self.worker,self.taskid+1, self.taskTrace))
 			return [taskArrivalEvent, taskAssignEvent]
 		else:
 			return [taskAssignEvent]
@@ -61,25 +61,29 @@ class TaskArrival(Event):
 		self.taskTrace = taskTrace
 	def run(self, currentTime):
 		task = taskGeneration(self.taskid,currentTime)
+		res = []
 		if self.taskid < cfg.numTasks:
 			self.taskTrace.append(task)
 			self.worker.centralQueue.append(task)
+			self.worker.maxQueueLength = max(self.worker.maxQueueLength,len(self.worker.centralQueue))
 			taskAssignEvent = (currentTime, TaskAssign(self.worker))
+			res.append(taskAssignEvent)
 			logging.debug('task arrival (id, duration, memDemand) = (%d,%f,%f) at time %f\n',\
 				task.taskid, task.duration,task.memDemand, currentTime)
-			arrivalDelay = round(random.expovariate(1.0 / self.interArrivalDelay),3)
-			taskArrivalEvent = \
-			(currentTime + arrivalDelay, TaskArrival(self.worker,\
-			 self.interArrivalDelay, self.taskid+1, self.taskTrace))
-			return [taskArrivalEvent, taskAssignEvent]
-		else:
-			return []
+			#arrivalDelay = random.expovariate(1.0 / self.interArrivalDelay)
+			arrivalDelay = self.interArrivalDelay
+			if (self.taskid < cfg.numTasks -1):
+				taskArrivalEvent = (currentTime + arrivalDelay, TaskArrival(self.worker,\
+			 	self.interArrivalDelay, self.taskid+1, self.taskTrace))
+				res.append(taskArrivalEvent)
+		return res
 
 class TaskAssign(Event):
 	# if there's enough mem, put one task into the first execution queue
 	def __init__(self,worker):
 		self.worker = worker
 	def run(self, currentTime):
+		res = []
 		if(len(self.worker.centralQueue)>0):
 			task = self.worker.centralQueue[0]
 			if( self.worker.usedMem + task.memDemand <= self.worker.memCapacity):
@@ -90,8 +94,9 @@ class TaskAssign(Event):
 				if (len(self.worker.queues[0])==1):
 					#just moved to the first queue which is empty
 					taskProcessingEvent = (currentTime, TaskProcessing(self.worker, 0))
-					return [taskProcessingEvent]
-		return []
+					res.append(taskProcessingEvent)
+				#	print "in assgin event post processing on queue%d, at time%f queue len %d"%(0,currentTime,len(self.worker.queues[0]))
+		return res
 
 
 class TaskProcessing(Event):
@@ -101,27 +106,27 @@ class TaskProcessing(Event):
 		self.queueid = queueid
 
 	def run(self, currentTime):
+		res = []
 		if(len(self.worker.queues[self.queueid])>0):
 			frontTask = self.worker.queues[self.queueid][0]
 			logging.debug("processing task %d on queue %d at time %f\n",\
 				frontTask.taskid,self.queueid,currentTime)
 			if(frontTask.remTime <= self.worker.thresholds[self.queueid]):	
 				taskEndEvent = (currentTime+frontTask.remTime, TaskEnd(self.worker, frontTask, self.queueid))
-				return [taskEndEvent]
+				res.append(taskEndEvent)
 			else:
 				assert(self.queueid < cfg.numCores-1)
 				curThreshold = self.worker.thresholds[self.queueid]
 				taskMigrationEvent = (currentTime+cfg.switchingOverhead+curThreshold, \
 					TaskMigration(self.worker, frontTask, self.queueid, self.queueid+1))
-				return [taskMigrationEvent]
+				res.append(taskMigrationEvent)
 		elif (self.queueid == 0 and len(self.worker.centralQueue) > 0):
 			logging.debug("the first queue is empty, \
 				a new taskAssignEvent is scheduled at time %f\n",currentTime)
 			taskAssignEvent = (currentTime, TaskAssign(self.worker))
-			return [taskAssignEvent]
-
-		else:
-			return []
+			res.append(taskAssignEvent)
+		assert(len(res)<=1)
+		return res
 
 
 
@@ -133,19 +138,24 @@ class TaskMigration(Event):
 		self.desID = desID
 		assert(desID >=1 )
 	def run(self,currentTime):
+		res = []
+		#if(len(self.worker.queues[self.curID]) ==0):
+		if(len(self.worker.queues[self.curID])==0):
+			print "[debug] %d"%(self.curID)
 		self.worker.queues[self.curID].pop(0)
 		self.task.remTime -= self.worker.thresholds[self.curID]
 		self.worker.queues[self.desID].append(self.task)
+		self.worker.busyTime[self.curID] += self.worker.thresholds[self.curID]
 		logging.debug("migrating task %d from queue %d to queue %d at time %f\n",\
 			self.task.taskid, self.desID-1,self.desID,currentTime)
 		taskProcessingEvent1 = (currentTime, TaskProcessing(self.worker, self.curID))
+		res.append(taskProcessingEvent1)
 		if(len(self.worker.queues[self.desID]) == 1):
 			#just moved to an empty queue
 			logging.debug("the destination queue is empty\n")
 			taskProcessingEvent2 = (currentTime, TaskProcessing(self.worker, self.desID))
-			return [taskProcessingEvent1, taskProcessingEvent2]
-		else:
-			return [taskProcessingEvent1]
+			res.append(taskProcessingEvent2)
+		return res
 
 
 class TaskEnd(Event):
@@ -154,17 +164,27 @@ class TaskEnd(Event):
 		self.task = task
 		self.queueid = queueid
 	def run(self, currentTime):
+		res = []
+		self.worker.endTaskCounter += 1
 		logging.debug("task %d end on queue %d at time %f\n",self.task.taskid,self.queueid,currentTime)
 		self.worker.queues[self.queueid].pop(0)
+		self.worker.busyTime[self.queueid] += self.task.remTime
 		self.task.remTime =0
 		self.worker.usedMem -= self.task.memDemand
-		self.worker.finishTime[self.task.taskid] = currentTime
 		slowdown = (currentTime - self.task.arrivalTime)/self.task.duration
 		logging.info("task %d arrivals at %f with duration %f, finishs at %f, slowdown is %f\n",\
 			self.task.taskid, self.task.arrivalTime, self.task.duration, currentTime, slowdown)
 		self.worker.slowDownStat[self.task.taskid] = slowdown
-		taskProcessingEvent = (currentTime, TaskProcessing(self.worker,self.queueid))
-		return [taskProcessingEvent]
+		self.worker.flowTimeStat[self.task.taskid] = currentTime - self.task.arrivalTime
+		if (len(self.worker.queues[self.queueid]) >0 ):
+			taskProcessingEvent = (currentTime, TaskProcessing(self.worker,self.queueid))
+			res.append(taskProcessingEvent)
+		#print "in task end event post a processing event on queue %d,at time %f queue len%d"%(self.queueid,currentTime,len(self.worker.queues[self.queueid]))
+		taskAssignEvent = (currentTime,TaskAssign(self.worker))
+		res.append(taskAssignEvent)
+		if (self.worker.endTaskCounter == cfg.numTasks):
+			self.worker.terminationTime = currentTime
+		return res
 
 class Worker(object):
 	def __init__(self, id):
@@ -173,15 +193,17 @@ class Worker(object):
 		self.centralQueue = []
 		self.queues = []
 		self.id = id
-		self.thresholds =[3**k*0.1 for k in range(cfg.numCores-1)]
-		logging.critical("thresholds:%s\n",str([x for x in self.thresholds]))
+		self.endTaskCounter = 0
+		self.maxQueueLength = 0
+		self.thresholds =[20**k*300 for k in range(cfg.numCores-1)]
+		logging.warning("thresholds:%s\n",str([x for x in self.thresholds]))
 		self.slowDownStat = {}
+		self.flowTimeStat = {}
 		self.thresholds.append(np.inf)
-		self.finishTime = {}
-		self.arrivalTime = {}
 		while len(self.queues) < cfg.numCores:
 			self.queues.append([])
-
+		self.busyTime = [0 for x in xrange(cfg.numCores)]
+		self.terminationTime = 0
 def get_percentile(N, percent):
     if not N:
         return -1
@@ -199,14 +221,19 @@ def boundedParetoMedian(l,h,a):
 	temp = 1-0.5*(1-(l/h)**a)
 	res = l*temp**(-1/a)
 	return res
+def boundedParetoMeanWiki(l,h,a):
+	assert(not a==1)
+	temp = l**a/(1-(l/h)**a)
+	res = temp*a/(a-1)*(1/l**(a-1)-1/h**(a-1))
+	return res
 
 
 class Migration(object):
 	def __init__(self,flag,trace=[]):
 		self.centralQueue = []
-		mean = boundedParetoMedian(cfg.paretoK,cfg.maxTaskDuration,cfg.paretoA)
-		self.interArrivalDelay = mean/(cfg.load*cfg.numCores)
-		logging.warning("pareto median:%f interArrivalDelay: %f\n",mean,self.interArrivalDelay)
+		self.mean = boundedParetoMeanWiki(cfg.paretoK,cfg.maxTaskDuration,cfg.paretoA)
+		self.median = boundedParetoMedian(cfg.paretoK,cfg.maxTaskDuration,cfg.paretoA)
+		self.interArrivalDelay = self.mean/(cfg.load*cfg.numCores)
 		self.eventQueue = Queue.PriorityQueue()
 		self.worker = Worker(0)
 		self.fromTrace = flag
@@ -222,6 +249,8 @@ class Migration(object):
 			self.eventQueue.put((0,TaskArrivalWithTrace(self.worker,0,self.taskTrace)))
 		else:
 			self.eventQueue.put((0,TaskArrival(self.worker,self.interArrivalDelay,0,self.taskTrace)))
+			logging.critical("dist mean:%f, dist median:%f,interArrivalDelay:%f\n",\
+				self.mean,self.median,self.interArrivalDelay)
 		lastTime = 0
 		while not self.eventQueue.empty():
 			(currentTime, event) = self.eventQueue.get()
@@ -231,16 +260,25 @@ class Migration(object):
 			newEvents = event.run(currentTime)
 			for newEvent in newEvents:
 				self.eventQueue.put(newEvent)
+		if(not self.fromTrace):
+			print(self.worker.endTaskCounter, len(self.taskTrace), cfg.numTasks)
+			assert(self.worker.endTaskCounter == cfg.numTasks)
 		slowdowns = self.worker.slowDownStat.values()
 		slowdowns.sort()
+		ft = self.worker.flowTimeStat.values()
 		median = get_percentile(slowdowns,50)
 		percentile99 = get_percentile(slowdowns,99)
-		mean = np.mean(slowdowns)
+		meanSlowdown = np.mean(slowdowns)
+		meanFt = np.mean(ft)
 		logging.warning("Migration average slowdown is %f\n", mean)
 		logging.warning("Migration max slowdown is %f\n",max(slowdowns))
-		logging.warning("Migration median and 99th percentile slowdowns are %f,%f\n",\
-			median,percentile99)
-		return (self.taskTrace, mean)
+		logging.warning("Migration average flowTime is %f\n",meanFt)
+		logging.critical("max queue length achieved:%d\n",self.worker.maxQueueLength)
+		for x in self.worker.busyTime:
+			print "migration cpu utilization:%f"%(x/self.worker.terminationTime)
+		print "migration sum of workload:%f terminationTime:%f"%\
+		(sum(self.worker.busyTime),self.worker.terminationTime)
+		return (self.taskTrace, meanSlowdown,meanFt)
 
 def main():
 	logging.basicConfig(level=logging.ERROR, format='%(message)s')
