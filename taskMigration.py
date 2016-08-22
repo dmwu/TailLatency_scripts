@@ -195,7 +195,7 @@ class Worker(object):
 		self.id = id
 		self.endTaskCounter = 0
 		self.maxQueueLength = 0
-		self.thresholds =[20**k*300 for k in range(cfg.numCores-1)]
+		self.thresholds =[20**k*4.867 for k in range(cfg.numCores-1)]
 		logging.warning("thresholds:%s\n",str([x for x in self.thresholds]))
 		self.slowDownStat = {}
 		self.flowTimeStat = {}
