@@ -249,8 +249,8 @@ class Migration(object):
 			self.eventQueue.put((0,TaskArrivalWithTrace(self.worker,0,self.taskTrace)))
 		else:
 			self.eventQueue.put((0,TaskArrival(self.worker,self.interArrivalDelay,0,self.taskTrace)))
-			logging.critical("dist mean:%f, dist median:%f,interArrivalDelay:%f\n",\
-				self.mean,self.median,self.interArrivalDelay)
+			#logging.critical("dist mean:%f, dist median:%f,interArrivalDelay:%f\n",\
+			#	self.mean,self.median,self.interArrivalDelay)
 		lastTime = 0
 		while not self.eventQueue.empty():
 			(currentTime, event) = self.eventQueue.get()
@@ -273,7 +273,7 @@ class Migration(object):
 		logging.warning("Migration average slowdown is %f\n", mean)
 		logging.warning("Migration max slowdown is %f\n",max(slowdowns))
 		logging.warning("Migration average flowTime is %f\n",meanFt)
-		logging.critical("max queue length achieved:%d\n",self.worker.maxQueueLength)
+		#logging.critical("max queue length achieved:%d\n",self.worker.maxQueueLength)
 		for x in self.worker.busyTime:
 			print "migration cpu utilization:%f"%(x/self.worker.terminationTime)
 		print "migration sum of workload:%f terminationTime:%f"%\
