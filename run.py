@@ -96,27 +96,24 @@ def main():
 	# for x in getSamples(productionTrace,100):
 	# 	print x
 	#writeDurationstoFile("duration.txt",productionTrace)
-	for x in range(0,5):
-		cfg.memoryCapacity = 128.0*10**x
-		logging.critical("=====memoryCapacity:%f============\n",cfg.memoryCapacity)
-		for y in range(0,3):
-			logging.critical("*********round %d***********\n",y)
-			migration = taskMigration.Migration(False)
-			(trace,miSlowdownMean,miFTmean) = migration.run()
-			traceCheck(trace)
-			writeDurationstoFile("duration.txt",trace)
-			fifo = FIFO.FIFO(trace)
-			(fifoSlowdownMean,fifoFTmean) = fifo.run()
-			logging.critical("paretoA:%f, givenLoad:%f,calculatedLoad:%f\n",\
-				cfg.paretoA, cfg.load,getLoadFromTrace(trace))
-			duMean,duMedian = getStatisticFromTrace(trace)
-			logging.critical("calculated mean and median:(%f,%f)\n",duMean,duMedian)
-			slowdownSpeedup = fifoSlowdownMean/miSlowdownMean
-			FTspeedup = fifoFTmean/miFTmean
-			logging.critical("[slowdown]fifo:%3f,migration:%f,speedup:%3f\n",\
-				round(fifoSlowdownMean,2),round(miSlowdownMean,2),slowdownSpeedup)
-			logging.critical("[flowtime]fifo:%3f,migration:%f,speedup:%3f\n",\
-				round(fifoFTmean,2),round(miFTmean,2),FTspeedup)
+	for y in range(0,30):
+		logging.critical("*********round %d***********\n",y)
+		migration = taskMigration.Migration(False)
+		(trace,miSlowdownMean,miFTmean) = migration.run()
+		traceCheck(trace)
+		#writeDurationstoFile("duration.txt",trace)
+		fifo = FIFO.FIFO(trace)
+		(fifoSlowdownMean,fifoFTmean) = fifo.run()
+		#logging.critical("paretoA:%f, givenLoad:%f,calculatedLoad:%f\n",\
+		#	cfg.paretoA, cfg.load,getLoadFromTrace(trace))
+		duMean,duMedian = getStatisticFromTrace(trace)
+		#logging.critical("calculated mean and median:(%f,%f)\n",duMean,duMedian)
+		slowdownSpeedup = fifoSlowdownMean/miSlowdownMean
+		FTspeedup = fifoFTmean/miFTmean
+		logging.critical("[slowdown]fifo:%3f,migration:%f,speedup:%3f\n",\
+			round(fifoSlowdownMean,2),round(miSlowdownMean,2),slowdownSpeedup)
+		logging.critical("[flowtime]fifo:%3f,migration:%f,speedup:%3f\n",\
+			round(fifoFTmean,2),round(miFTmean,2),FTspeedup)
 
 
 if __name__ == "__main__":
