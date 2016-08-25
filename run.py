@@ -8,6 +8,7 @@ import logging
 def getSamples(trace, count):
 	for x in xrange(min(count,len(trace))):
 		yield "duration:%f,arrivalTime:%f\n"%(trace[x].duration,trace[x].arrivalTime)
+
 def traceCheck(trace):
 	assert(len(trace) >0 )
 	lastTime = 0
@@ -79,7 +80,7 @@ def varyWithload():
 		cfg.paretoA, cfg.load, fifomean/migrationMean)
 
 def main():
-	logging.basicConfig(level=logging.CRITICAL, format='%(message)s')
+	logging.basicConfig(filename = "log08222016.txt",filemode = 'a',level=logging.CRITICAL, format='%(message)s')
 	# customTrace=[cfg.Task(0, 20.0, 3.0, 0), cfg.Task(1, 21.0, 3.0, 0.2),\
 	# 	   cfg.Task(2, 0.2, 3.0, 0.3), cfg.Task(3, 0.21, 3.0, 0.4)]
 	# filenames=["FB-2009_samples_24_times_1hr_0.tsv",
@@ -96,7 +97,7 @@ def main():
 	# for x in getSamples(productionTrace,100):
 	# 	print x
 	#writeDurationstoFile("duration.txt",productionTrace)
-	for y in range(0,30):
+	for y in range(0,10):
 		logging.critical("*********round %d***********\n",y)
 		migration = taskMigration.Migration(False)
 		(trace,miSlowdownMean,miFTmean) = migration.run()
