@@ -261,7 +261,6 @@ class Migration(object):
 			for newEvent in newEvents:
 				self.eventQueue.put(newEvent)
 		if(not self.fromTrace):
-			print(self.worker.endTaskCounter, len(self.taskTrace), cfg.numTasks)
 			assert(self.worker.endTaskCounter == cfg.numTasks)
 		slowdowns = self.worker.slowDownStat.values()
 		slowdowns.sort()
@@ -278,7 +277,7 @@ class Migration(object):
 			print "migration cpu utilization:%f"%(x/self.worker.terminationTime)
 		print "migration sum of workload:%f terminationTime:%f"%\
 		(sum(self.worker.busyTime),self.worker.terminationTime)
-		return (self.taskTrace, meanSlowdown,meanFt)
+		return (self.taskTrace, meanSlowdown, meanFt)
 
 def main():
 	logging.basicConfig(level=logging.ERROR, format='%(message)s')
