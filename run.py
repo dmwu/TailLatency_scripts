@@ -96,7 +96,7 @@ def main():
 	# for x in getSamples(productionTrace,100):
 	# 	print x
 	#writeDurationstoFile("duration.txt",productionTrace)
-	for y in range(0,30):
+	for y in range(0,20):
 		logging.critical("*********round %d***********\n",y)
 		migration = taskMigration.Migration(False)
 		(trace,miSlowdownMean,miFTmean) = migration.run()

@@ -1,13 +1,13 @@
 numCores = 2
-memoryCapacity = 12800000.0
+memoryCapacity = 128.0
 paretoK = 0.01
 paretoA = 1.1
-maxTaskDuration = 1.0e6
+maxTaskDuration = 1.0e5
 memLower = 1 #unit GB
 memUpper = 10
 switchingOverhead = 0.0
 load = 0.8
-numTasks = 10000000
+numTasks = 1e7
 networkBandwidth = 1024*1024*1000.0 #1000MB
 diskBandwidth = 1024*1024*100.0 #100MB
 CPUspeed = 2*1024*1024*1024.0 #2GHz
