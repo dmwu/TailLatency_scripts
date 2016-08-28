@@ -16,7 +16,7 @@ from math import floor
 def taskGeneration(taskid,currentTime):
 	duration = float((np.random.pareto(cfg.paretoA,1)+1)*cfg.paretoK)
 	duration = min(duration,cfg.maxTaskDuration)
-	memDemand = min(1,(duration*10000/cfg.maxTaskDuration))*\
+	memDemand = (duration-cfg.paretoK)/(cfg.maxTaskDuration-cfg.paretoK)*\
 	(cfg.memUpper-cfg.memLower) + cfg.memLower
 	return Task(taskid, duration,memDemand, currentTime)
 
@@ -204,6 +204,7 @@ class Worker(object):
 			self.queues.append([])
 		self.busyTime = [0 for x in xrange(cfg.numCores)]
 		self.terminationTime = 0
+
 def get_percentile(N, percent):
     if not N:
         return -1
@@ -221,6 +222,7 @@ def boundedParetoMedian(l,h,a):
 	temp = 1-0.5*(1-(l/h)**a)
 	res = l*temp**(-1/a)
 	return res
+	
 def boundedParetoMeanWiki(l,h,a):
 	assert(not a==1)
 	temp = l**a/(1-(l/h)**a)
