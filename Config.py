@@ -1,5 +1,5 @@
 numCores = 2
-memoryCapacity = 128.0
+memoryCapacity = 128.0e8
 paretoK = 0.01
 paretoA = 1.1
 maxTaskDuration = 3.6e5

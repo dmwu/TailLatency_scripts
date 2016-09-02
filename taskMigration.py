@@ -14,7 +14,7 @@ from operator import itemgetter
 from math import floor
 
 def taskGeneration(taskid,currentTime):
-	duration = float((np.random.pareto(cfg.paretoA,1)+1)*cfg.paretoK)
+	duration = float((np.random.pareto(cfg.paretoA)+1)*cfg.paretoK)
 	duration = min(duration,cfg.maxTaskDuration)
 	memDemand = (duration-cfg.paretoK)/(cfg.maxTaskDuration-cfg.paretoK)*\
 	(cfg.memUpper-cfg.memLower) + cfg.memLower
@@ -195,7 +195,7 @@ class Worker(object):
 		self.id = id
 		self.endTaskCounter = 0
 		self.maxQueueLength = 0
-		self.thresholds =[20**k*4.867 for k in range(cfg.numCores-1)]
+		self.thresholds =[20**k*3.682 for k in range(cfg.numCores-1)]
 		logging.warning("thresholds:%s\n",str([x for x in self.thresholds]))
 		self.slowDownStat = {}
 		self.flowTimeStat = {}

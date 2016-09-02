@@ -80,7 +80,7 @@ def varyWithload():
 		cfg.paretoA, cfg.load, fifomean/migrationMean)
 
 def main():
-	logging.basicConfig(filename = "log0824.txt",filemode = 'a',level=logging.CRITICAL, format='%(message)s')
+	logging.basicConfig(level=logging.CRITICAL, format='%(message)s')
 	# customTrace=[cfg.Task(0, 20.0, 3.0, 0), cfg.Task(1, 21.0, 3.0, 0.2),\
 	# 	   cfg.Task(2, 0.2, 3.0, 0.3), cfg.Task(3, 0.21, 3.0, 0.4)]
 	# filenames=["FB-2009_samples_24_times_1hr_0.tsv",
