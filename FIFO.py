@@ -104,14 +104,14 @@ class Worker(object):
 	def __init__(self,id,trace):
 		self.id = id
 		self.trace = trace
-		self.emptyCores = range(cfg.numCores)
+		self.emptyCores = range(cfg.totalNumOfCores)
 		self.memCapacity = cfg.memoryCapacity
 		self.usedMem = 0
-		self.centralQueue = []
+		self.centralQueue = [] 
 		self.id = id
 		self.slowDownStat = {}
 		self.flowTimeStat = {}
-		self.busyTime = [0 for x in xrange(cfg.numCores)]
+		self.busyTime = [0 for x in xrange(cfg.totalNumOfCores)]
 		self.terminationTime = 0
 		self.endTaskCounter = 0
 

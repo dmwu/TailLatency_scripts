@@ -92,13 +92,27 @@ class TaskAssign(Event):
 				self.worker.centralQueue.pop(0)
 				assert(task.mode == 'notStarted')
 				task.mode = 'waiting'
-				self.worker.queues[0].append(task)
-				logging.debug("assign task %d on the first queue at time %f\n",task.taskid, currentTime)
 				if (len(self.worker.emptyCores[0])> 0):
-					#there's available cores to run the task
+					self.worker.queues[0].append(task)
+					#default action is to put the task on the first queue
 					taskProcessingEvent = (currentTime, TaskProcessing(self.worker, 0))
 					res.append(taskProcessingEvent)
-				#	print "in assgin event post processing on queue%d, at time%f queue len %d"%(0,currentTime,len(self.worker.queues[0]))
+					logging.debug("assign task %d on the first queue at time %f\n",task.taskid, currentTime)
+				else:
+					for x in xrange(cfg.numQueues-1,0,-1):
+						if(len(self.worker.emptyCores[x])>0):
+							self.worker.queues[x].append(task)
+							taskProcessingEvent = (currentTime,TaskProcessing(self.worker,x))
+							res.append(taskProcessingEvent)
+							logging.debug("assign task %d on the queue %d at time %f\n",task.taskid, x, currentTime)
+							break
+				if(len(res)==0):
+					self.worker.queues[0].append(task)
+					#all queues are busy, put it on the first queue
+					taskProcessingEvent = (currentTime, TaskProcessing(self.worker, 0))
+					res.append(taskProcessingEvent)
+					logging.debug("assign task %d on the first queue at time %f\n",task.taskid, currentTime)
+				assert(len(res)==1)
 		return res
 
 
@@ -199,19 +213,19 @@ class TaskEnd(Event):
 		#print "in task end event post a processing event on queue %d,at time %f queue len%d"%(self.queueid,currentTime,len(self.worker.queues[self.queueid]))
 		taskAssignEvent = (currentTime,TaskAssign(self.worker))
 		res.append(taskAssignEvent)
-		if (self.worker.endTaskCounter == cfg.numTasks):
+		if (self.worker.endTaskCounter == self.worker.numTasks):
 			self.worker.terminationTime = currentTime
 		return res
 
 class Worker(object):
-	def __init__(self, wid,load):
+	def __init__(self, id,load, numTasks=0):
 		self.memCapacity = cfg.memoryCapacity
 		self.usedMem = 0
 		self.cores_per_queue = cfg.totalNumOfCores/cfg.numQueues
 		assert(type(self.cores_per_queue) is int)
 		self.centralQueue = []
 		self.queues = [[] for i in xrange(cfg.numQueues)]
-		self.id = wid
+		self.id = id
 		self.endTaskCounter = 0
 		self.maxQueueLength = 0
 		self.thresholds =cfg.loadAndThresholds[load][:]
@@ -223,6 +237,7 @@ class Worker(object):
 		self.busyTime = [0 for x in xrange(cfg.totalNumOfCores)]
 		self.terminationTime = 0
 		self.emptyCores = {}
+		self.numTasks = numTasks
 		for x in xrange(cfg.numQueues):
 			self.emptyCores[x] = [x*self.cores_per_queue+y for y in xrange(self.cores_per_queue)]
 
@@ -251,21 +266,22 @@ def boundedParetoMeanWiki(l,h,a):
 	return res
 
 
-class Migration(object):
+class BoostMigration(object):
 	def __init__(self,flag,load, trace=[]):
 		self.centralQueue = []
-		self.load = load
 		self.mean = boundedParetoMeanWiki(cfg.paretoK,cfg.maxTaskDuration,cfg.paretoA)
 		self.median = boundedParetoMedian(cfg.paretoK,cfg.maxTaskDuration,cfg.paretoA)
-		self.interArrivalDelay = self.mean/(self.load*cfg.totalNumOfCores)
+		self.interArrivalDelay = self.mean/(load*cfg.totalNumOfCores)
 		self.eventQueue = Queue.PriorityQueue()
-		self.worker = Worker(0,self.load)
+		
 		self.fromTrace = flag
 		if(self.fromTrace):
 			assert(len(trace)>0)
 			self.taskTrace = trace
+			self.worker = Worker(0,load,len(trace))
 		else:
 			self.taskTrace = []
+			self.worker = Worker(0,load)
 
 	def run(self):
 		if (self.fromTrace):
@@ -286,6 +302,8 @@ class Migration(object):
 				self.eventQueue.put(newEvent)
 		if(not self.fromTrace):
 			assert(self.worker.endTaskCounter == cfg.numTasks)
+		else:
+			assert(self.worker.endTaskCounter == len(self.taskTrace))
 		slowdowns = self.worker.slowDownStat.values()
 		slowdowns.sort()
 		ft = self.worker.flowTimeStat.values()
@@ -297,16 +315,17 @@ class Migration(object):
 		logging.warning("Migration max slowdown is %f\n",max(slowdowns))
 		logging.warning("Migration average flowTime is %f\n",meanFt)
 		#logging.critical("max queue length achieved:%d\n",self.worker.maxQueueLength)
-		for x in self.worker.busyTime:
-			print "migration cpu utilization:%f"%(x/self.worker.terminationTime)
-		print "migration sum of workload:%f terminationTime:%f"%\
+		print "boost migration sum of workload:%f terminationTime:%f"%\
 		(sum(self.worker.busyTime),self.worker.terminationTime)
+		for x in self.worker.busyTime:
+			print "boost migration cpu utilization:%f"%(x/self.worker.terminationTime)
 		return (self.taskTrace, meanSlowdown, meanFt)
 
 def main():
-	logging.basicConfig(level=logging.ERROR, format='%(message)s')
-	for x in xrange(3):
-		migration = Migration(False)
-		print migration.worker.thresholds
+	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+	customTrace=[cfg.Task(0, 20.0, 3.0, 0), cfg.Task(1, 21.0, 3.0, 0.2),\
+		   cfg.Task(2, 0.2, 3.0, 0.3), cfg.Task(3, 0.21, 3.0, 0.4)]
+	migration = BoostMigration(True, customTrace)
+	trace = migration.run()
 if __name__ == "__main__":
 	main()

@@ -1,6 +1,8 @@
 import taskMigration
 import FIFO
+import boostMigration
 import random
+import evictLongestTask
 import numpy as np
 import Config as cfg
 from Config import Task
@@ -9,12 +11,12 @@ def getSamples(trace, count):
 	for x in xrange(min(count,len(trace))):
 		yield "duration:%f,arrivalTime:%f\n"%(trace[x].duration,trace[x].arrivalTime)
 
-def traceCheck(trace):
+def traceCheckandRestore(trace):
 	assert(len(trace) >0 )
 	lastTime = 0
 
 	#print("==========checking",len(trace))
-	for x in range(len(trace)):
+	for x in xrange(len(trace)):
 		#print (trace[x].taskid,trace[x].arrivalTime)
 		if(trace[x].taskid!=x):
 			logging.critical("ERROR! taskid inconsistency in trace,x:%d,\
@@ -23,6 +25,8 @@ def traceCheck(trace):
 			logging.critical("ERROR! arrivalTime inconsistency in trace,\
 				lastTime:%f,arrivalTime:%f\n",lastTime,trace[x].arrivalTime)
 		lastTime = trace[x].arrivalTime
+		trace[x].mode = 'notStarted'
+		trace[x].remTime = trace[x].duration
 
 def parsingTrace(filename,trace,lastArrivalTime,lastID):
 	count = lastID
@@ -80,7 +84,7 @@ def varyWithload():
 		cfg.paretoA, cfg.load, fifomean/migrationMean)
 
 def main():
-	logging.basicConfig(level=logging.CRITICAL, format='%(message)s')
+	logging.basicConfig(filename='logging0928_evit.txt',filemode='a+',level=logging.CRITICAL, format='%(message)s')
 	# customTrace=[cfg.Task(0, 20.0, 3.0, 0), cfg.Task(1, 21.0, 3.0, 0.2),\
 	# 	   cfg.Task(2, 0.2, 3.0, 0.3), cfg.Task(3, 0.21, 3.0, 0.4)]
 	# filenames=["FB-2009_samples_24_times_1hr_0.tsv",
@@ -97,12 +101,20 @@ def main():
 	# for x in getSamples(productionTrace,100):
 	# 	print x
 	#writeDurationstoFile("duration.txt",productionTrace)
-	for y in range(0,20):
-		logging.critical("*********round %d***********\n",y)
-		migration = taskMigration.Migration(False)
+	items = cfg.loadAndThresholds.items()
+	items.sort(key = lambda x:x[0])
+	for (load,thresds) in items:
+		logging.critical("*********cores:%d,load%f with memory %d***********\n",cfg.totalNumOfCores,load,cfg.memoryCapacity)
+		migration = taskMigration.Migration(False,load)
 		(trace,miSlowdownMean,miFTmean) = migration.run()
-		traceCheck(trace)
-		#writeDurationstoFile("duration.txt",trace)
+		traceCheckandRestore(trace)
+		boostmi = boostMigration.BoostMigration(True,load,trace)
+		(newtrace,booSlowdown,booFTmean) = boostmi.run()
+
+		traceCheckandRestore(trace)
+		evictmi = evictLongestTask.EvictMigration(True,load,trace)
+		(newnewtrace,evictSlowdown,evictFt) = evictmi.run()
+
 		fifo = FIFO.FIFO(trace)
 		(fifoSlowdownMean,fifoFTmean) = fifo.run()
 		#logging.critical("paretoA:%f, givenLoad:%f,calculatedLoad:%f\n",\
@@ -111,10 +123,14 @@ def main():
 		#logging.critical("calculated mean and median:(%f,%f)\n",duMean,duMedian)
 		slowdownSpeedup = fifoSlowdownMean/miSlowdownMean
 		FTspeedup = fifoFTmean/miFTmean
-		logging.critical("[slowdown]fifo:%3f,migration:%f,speedup:%3f\n",\
-			round(fifoSlowdownMean,2),round(miSlowdownMean,2),slowdownSpeedup)
-		logging.critical("[flowtime]fifo:%3f,migration:%f,speedup:%3f\n",\
-			round(fifoFTmean,2),round(miFTmean,2),FTspeedup)
+		boslowdownSpeedup = fifoSlowdownMean/booSlowdown
+		boftspeedup = fifoFTmean/booFTmean
+		evictSDSpeedup = fifoSlowdownMean/evictSlowdown
+		evictFTSpeedup = fifoFTmean/evictFt
+		logging.critical("[slowdown]fifo:%3f,migration:%f,boostMigration:%f,speedup1:%3f speedup2:%3f speedup3:%3f \n",\
+			round(fifoSlowdownMean,2),round(miSlowdownMean,2),round(booSlowdown,2), slowdownSpeedup, boslowdownSpeedup,evictSDSpeedup)
+		logging.critical("[flowtime]fifo:%3f,migration:%f,boostMigration:%f speedup1:%3f speedup2:%3f speedup3:%3f \n",\
+			round(fifoFTmean,2),round(miFTmean,2),round(booFTmean),FTspeedup,boftspeedup,evictFTSpeedup)
 
 
 if __name__ == "__main__":

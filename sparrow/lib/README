@@ -1,1 +1,0 @@
-mvn install:install-file -DgroupId=javax.jms -DartifactId=jms           -Dversion=1.1 -Dpackaging=jar -Dfile=./javax.jms-1.1.jar
