@@ -317,8 +317,8 @@ class BoostMigration(object):
 		#logging.critical("max queue length achieved:%d\n",self.worker.maxQueueLength)
 		print "boost migration sum of workload:%f terminationTime:%f"%\
 		(sum(self.worker.busyTime),self.worker.terminationTime)
-		for x in self.worker.busyTime:
-			print "boost migration cpu utilization:%f"%(x/self.worker.terminationTime)
+		#for x in self.worker.busyTime:
+		#	print "boost migration cpu utilization:%f"%(x/self.worker.terminationTime)
 		return (self.taskTrace, meanSlowdown, meanFt)
 
 def main():

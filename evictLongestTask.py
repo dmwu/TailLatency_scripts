@@ -87,7 +87,7 @@ class TaskAssign(Event):
 		res = []
 		if(len(self.worker.centralQueue)>0):
 			task = self.worker.centralQueue[0]
-			if( self.worker.usedMem + task.memDemand <= self.worker.memCapacity):
+			if(self.worker.usedMem + task.memDemand <= self.worker.memCapacity):
 				self.worker.usedMem += task.memDemand
 				self.worker.centralQueue.pop(0)
 				assert(task.mode == 'notStarted')
@@ -113,6 +113,27 @@ class TaskAssign(Event):
 					res.append(taskProcessingEvent)
 					logging.debug("assign task %d on the first queue at time %f\n",task.taskid, currentTime)
 				assert(len(res)==1)
+
+			else:
+				#evit the task that takes the most amount of memory
+				for x in xrange(cfg.numQueues-1,0,-1):
+					if(len(self.worker.queues[x])>0):
+						maxMemTask = max(self.worker.queues[x],key = lambda xx:xx.memDemand)
+						self.worker.queues[x].remove(maxMemTask)
+						if(maxMemTask.mode =='processing'):
+							#temp solution just add a core 0 to the queue
+							maxMemTask.info = maxMemTask.info+1
+							self.worker.emptyCores[x].append(0)
+							taskProcessingEvent = (currentTime,TaskProcessing(self.worker,x))
+							res.append(taskProcessingEvent)
+						else:
+							maxMemTask.info = maxMemTask.info + 10
+						maxMemTask.mode = 'notStarted'
+						maxMemTask.remTime = maxMemTask.duration
+						self.worker.usedMem -= maxMemTask.memDemand
+						self.worker.centralQueue.append(maxMemTask)
+						taskAssignEvent = (currentTime,TaskAssign(self.worker))
+						res.append(taskAssignEvent)
 		return res
 
 
@@ -165,22 +186,23 @@ class TaskMigration(Event):
 		self.curCoreid = curCoreid
 	def run(self,currentTime):
 		res = []
-		self.worker.queues[self.curQueueid].remove(self.task)
-		self.worker.emptyCores[self.curQueueid].append(self.curCoreid)
-		assert(self.task.mode == 'processing')
-		self.task.mode = 'waiting'
-		self.task.remTime -= self.worker.thresholds[self.curQueueid]
-		self.worker.queues[self.desQueueid].append(self.task)
-		self.worker.busyTime[self.curCoreid] += self.worker.thresholds[self.curQueueid]
-		logging.debug("migrating task %d from queue %d to queue %d at time %f\n",\
-			self.task.taskid, self.desQueueid-1,self.desQueueid,currentTime)
-		taskProcessingEvent1 = (currentTime, TaskProcessing(self.worker, self.curQueueid))
-		res.append(taskProcessingEvent1)
-		if(len(self.worker.emptyCores[self.desQueueid]) > 0):
-			#just moved to an empty queue
-			logging.debug("the destination queue is empty\n")
-			taskProcessingEvent2 = (currentTime, TaskProcessing(self.worker, self.desQueueid))
-			res.append(taskProcessingEvent2)
+		if(self.task in self.worker.queues[self.curQueueid]):
+			self.worker.queues[self.curQueueid].remove(self.task)
+			self.worker.emptyCores[self.curQueueid].append(self.curCoreid)
+			assert(self.task.mode == 'processing')
+			self.task.mode = 'waiting'
+			self.task.remTime -= self.worker.thresholds[self.curQueueid]
+			self.worker.queues[self.desQueueid].append(self.task)
+			self.worker.busyTime[self.curCoreid] += self.worker.thresholds[self.curQueueid]
+			logging.debug("migrating task %d from queue %d to queue %d at time %f\n",\
+				self.task.taskid, self.desQueueid-1,self.desQueueid,currentTime)
+			taskProcessingEvent1 = (currentTime, TaskProcessing(self.worker, self.curQueueid))
+			res.append(taskProcessingEvent1)
+			if(len(self.worker.emptyCores[self.desQueueid]) > 0):
+				#just moved to an empty queue
+				logging.debug("the destination queue is empty\n")
+				taskProcessingEvent2 = (currentTime, TaskProcessing(self.worker, self.desQueueid))
+				res.append(taskProcessingEvent2)
 		return res
 
 
@@ -192,29 +214,34 @@ class TaskEnd(Event):
 		self.coreid = coreid
 	def run(self, currentTime):
 		res = []
-		self.worker.endTaskCounter += 1
-		logging.debug("task %d end on queue %d core %d at time %f\n",\
+		if(self.task in self.worker.queues[self.queueid]):
+			self.worker.endTaskCounter += 1
+			logging.debug("task %d end on queue %d core %d at time %f\n",\
 			self.task.taskid,self.queueid,self.coreid,currentTime)
-		self.worker.queues[self.queueid].remove(self.task)
-		self.worker.busyTime[self.coreid] += self.task.remTime
-		self.worker.emptyCores[self.queueid].append(self.coreid)
-		assert(self.task.mode == 'processing')
-		self.task.mode = 'done'
-		self.task.remTime =0
-		self.worker.usedMem -= self.task.memDemand
-		slowdown = (currentTime - self.task.arrivalTime)/self.task.duration
-		logging.info("task %d arrivals at %f with duration %f, finishs at %f, slowdown is %f\n",\
-			self.task.taskid, self.task.arrivalTime, self.task.duration, currentTime, slowdown)
-		self.worker.slowDownStat[self.task.taskid] = slowdown
-		self.worker.flowTimeStat[self.task.taskid] = currentTime - self.task.arrivalTime
-		if (len(self.worker.queues[self.queueid]) >0 ):
-			taskProcessingEvent = (currentTime, TaskProcessing(self.worker,self.queueid))
-			res.append(taskProcessingEvent)
-		#print "in task end event post a processing event on queue %d,at time %f queue len%d"%(self.queueid,currentTime,len(self.worker.queues[self.queueid]))
-		taskAssignEvent = (currentTime,TaskAssign(self.worker))
-		res.append(taskAssignEvent)
-		if (self.worker.endTaskCounter == self.worker.numTasks):
-			self.worker.terminationTime = currentTime
+			self.worker.queues[self.queueid].remove(self.task)
+			self.worker.busyTime[self.coreid] += self.task.remTime
+			self.worker.emptyCores[self.queueid].append(self.coreid)
+			if(not self.task.mode == 'processing'):
+				print self.task.mode
+				print self.task.info
+				print self.task.memDemand,self.task.duration
+				sys.exit(0)
+			self.task.mode = 'done'
+			self.task.remTime =0
+			self.worker.usedMem -= self.task.memDemand
+			slowdown = (currentTime - self.task.arrivalTime)/self.task.duration
+			logging.info("task %d arrivals at %f with duration %f, finishs at %f, slowdown is %f\n",\
+				self.task.taskid, self.task.arrivalTime, self.task.duration, currentTime, slowdown)
+			self.worker.slowDownStat[self.task.taskid] = slowdown
+			self.worker.flowTimeStat[self.task.taskid] = currentTime - self.task.arrivalTime
+			if (len(self.worker.queues[self.queueid]) >0 ):
+				taskProcessingEvent = (currentTime, TaskProcessing(self.worker,self.queueid))
+				res.append(taskProcessingEvent)
+			#print "in task end event post a processing event on queue %d,at time %f queue len%d"%(self.queueid,currentTime,len(self.worker.queues[self.queueid]))
+			taskAssignEvent = (currentTime,TaskAssign(self.worker))
+			res.append(taskAssignEvent)
+			if (self.worker.endTaskCounter == self.worker.numTasks):
+				self.worker.terminationTime = currentTime
 		return res
 
 class Worker(object):
@@ -266,7 +293,7 @@ def boundedParetoMeanWiki(l,h,a):
 	return res
 
 
-class BoostMigration(object):
+class EvictMigration(object):
 	def __init__(self,flag,load, trace=[]):
 		self.centralQueue = []
 		self.mean = boundedParetoMeanWiki(cfg.paretoK,cfg.maxTaskDuration,cfg.paretoA)
@@ -315,10 +342,10 @@ class BoostMigration(object):
 		logging.warning("Migration max slowdown is %f\n",max(slowdowns))
 		logging.warning("Migration average flowTime is %f\n",meanFt)
 		#logging.critical("max queue length achieved:%d\n",self.worker.maxQueueLength)
-		print "boost migration sum of workload:%f terminationTime:%f"%\
+		print "evict migration sum of workload:%f terminationTime:%f"%\
 		(sum(self.worker.busyTime),self.worker.terminationTime)
-		for x in self.worker.busyTime:
-			print "boost migration cpu utilization:%f"%(x/self.worker.terminationTime)
+	#	for x in self.worker.busyTime:
+	#		print "evict migration cpu utilization:%f"%(x/self.worker.terminationTime)
 		return (self.taskTrace, meanSlowdown, meanFt)
 
 def main():

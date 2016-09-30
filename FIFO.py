@@ -143,8 +143,8 @@ class FIFO(object):
 		logging.warning("FIFO max slowdown is %f\n",max(slowdowns))
 		logging.warning("FIFO flowTime mean is %f\n",ftMean)
 		logging.warning("FIFO median and 99th percentile slowdowns are %f,%f\n",median,percentile99)
-		for x in self.worker.busyTime:
-			print "fifo cpu utilization:%f"%(x/self.worker.terminationTime)
+	#	for x in self.worker.busyTime:
+	#		print "fifo cpu utilization:%f"%(x/self.worker.terminationTime)
 		print "fifo sum of workload:%f terminationTime:%f"%\
 		(sum(self.worker.busyTime),self.worker.terminationTime)
 		return (slowdownMean,ftMean)

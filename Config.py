@@ -12,7 +12,7 @@ memLower = 0.001*memoryCapacity#unit GB
 memUpper = 0.07*memoryCapacity
 switchingOverhead = 0.01
 load = 0.4
-numTasks = 8e5
+numTasks = 1e5
 networkBandwidth = 1024*1024*1000.0 #1000MB
 diskBandwidth = 1024*1024*100.0 #100MB
 CPUspeed = 2*1024*1024*1024.0 #2GHz
@@ -25,6 +25,7 @@ class Task(object):
 		self.taskid = taskid
 		self.arrivalTime = arrivTime
 		self.mode = 'notStarted'
+		self.info = 0 
 	def __str__(self):
 		return "id:%d, duration:%f, memDemand:%f, arrivalTime:%f\n"\
 		%(self.taskid,self.duration,self.memDemand,self.arrivalTime)
