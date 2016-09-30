@@ -127,10 +127,10 @@ def main():
 		boftspeedup = fifoFTmean/booFTmean
 		evictSDSpeedup = fifoSlowdownMean/evictSlowdown
 		evictFTSpeedup = fifoFTmean/evictFt
-		logging.critical("[slowdown]fifo:%3f,migration:%f,boostMigration:%f,speedup1:%3f speedup2:%3f speedup3:%3f \n",\
-			round(fifoSlowdownMean,2),round(miSlowdownMean,2),round(booSlowdown,2), slowdownSpeedup, boslowdownSpeedup,evictSDSpeedup)
-		logging.critical("[flowtime]fifo:%3f,migration:%f,boostMigration:%f speedup1:%3f speedup2:%3f speedup3:%3f \n",\
-			round(fifoFTmean,2),round(miFTmean,2),round(booFTmean),FTspeedup,boftspeedup,evictFTSpeedup)
+		logging.critical("[slowdown]fifo:%3f,migration:%f,boostMigration:%f,evict:%3f,speedup1:%3f speedup2:%3f speedup3:%3f \n",\
+			round(fifoSlowdownMean,2),round(miSlowdownMean,2),booSlowdown, evictSlowdown, slowdownSpeedup, boslowdownSpeedup,evictSDSpeedup)
+		logging.critical("[flowtime]fifo:%3f,migration:%f,boostMigration:%f,evict:%3f speedup1:%3f speedup2:%3f speedup3:%3f \n",\
+			round(fifoFTmean,2),round(miFTmean,2),booFTmean,evictFt, FTspeedup,boftspeedup,evictFTSpeedup)
 
 
 if __name__ == "__main__":

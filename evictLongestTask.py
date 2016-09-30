@@ -116,24 +116,20 @@ class TaskAssign(Event):
 
 			else:
 				#evit the task that takes the most amount of memory
-				for x in xrange(cfg.numQueues-1,0,-1):
-					if(len(self.worker.queues[x])>0):
-						maxMemTask = max(self.worker.queues[x],key = lambda xx:xx.memDemand)
-						self.worker.queues[x].remove(maxMemTask)
-						if(maxMemTask.mode =='processing'):
-							#temp solution just add a core 0 to the queue
-							maxMemTask.info = maxMemTask.info+1
-							self.worker.emptyCores[x].append(0)
-							taskProcessingEvent = (currentTime,TaskProcessing(self.worker,x))
-							res.append(taskProcessingEvent)
-						else:
-							maxMemTask.info = maxMemTask.info + 10
-						maxMemTask.mode = 'notStarted'
-						maxMemTask.remTime = maxMemTask.duration
-						self.worker.usedMem -= maxMemTask.memDemand
-						self.worker.centralQueue.append(maxMemTask)
-						taskAssignEvent = (currentTime,TaskAssign(self.worker))
-						res.append(taskAssignEvent)
+				waitingTasks = [task for y in self.worker.queues for task in y if task.mode=='waiting']
+				if(len(waitingTasks)>0):
+					self.worker.evictCounter += 1
+					maxMemTask = max([waitingTasks], key=lambda xx:xx.memDemand)
+					maxMemTask.mode = 'notStarted'
+					maxMemTask.remTime = maxMemTask.duration
+					self.worker.usedMem -= maxMemTask.memDemand
+					self.worker.centralQueue.append(maxMemTask)
+					taskAssignEvent = (currentTime,TaskAssign(self.worker))
+					res.append(taskAssignEvent)
+					for x in xrange(cfg.numQueues-1,-1,-1):
+						if(maxMemTask in self.worker.queues[x]):
+							self.worker.queues[x].remove(maxMemTask)
+							break
 		return res
 
 
@@ -221,11 +217,7 @@ class TaskEnd(Event):
 			self.worker.queues[self.queueid].remove(self.task)
 			self.worker.busyTime[self.coreid] += self.task.remTime
 			self.worker.emptyCores[self.queueid].append(self.coreid)
-			if(not self.task.mode == 'processing'):
-				print self.task.mode
-				print self.task.info
-				print self.task.memDemand,self.task.duration
-				sys.exit(0)
+			assert(self.task.mode == 'processing')
 			self.task.mode = 'done'
 			self.task.remTime =0
 			self.worker.usedMem -= self.task.memDemand
@@ -265,6 +257,7 @@ class Worker(object):
 		self.terminationTime = 0
 		self.emptyCores = {}
 		self.numTasks = numTasks
+		self.evictCounter = 0
 		for x in xrange(cfg.numQueues):
 			self.emptyCores[x] = [x*self.cores_per_queue+y for y in xrange(self.cores_per_queue)]
 
@@ -344,6 +337,7 @@ class EvictMigration(object):
 		#logging.critical("max queue length achieved:%d\n",self.worker.maxQueueLength)
 		print "evict migration sum of workload:%f terminationTime:%f"%\
 		(sum(self.worker.busyTime),self.worker.terminationTime)
+		print "evict counter %f"%self.worker.evictCounter
 	#	for x in self.worker.busyTime:
 	#		print "evict migration cpu utilization:%f"%(x/self.worker.terminationTime)
 		return (self.taskTrace, meanSlowdown, meanFt)
